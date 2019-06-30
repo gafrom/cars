@@ -1,34 +1,38 @@
 import math
+import numpy as np
+
+from engine import Engine
 
 class Car(object):
-  T = 100 # miliseconds to drive in one move
+  T = 0.1 # seconds to drive in one move
   EYES = [-math.pi/2, -math.pi/4, 0, math.pi/4, math.pi/2]
   MIN_NUM_MOVES = 1000 # no matter how small the map might come we need at least that many moves
 
-  def __init__(self, v = 0, a = 0, rr = 0):
+  def __init__(self, v=0, a=0, s=0, rr=0.1):
     self.v     = v     # velocity, moves per second
-    self.a     = a     # acceleration (+) or slowing down (-), [-1..1]
-    self.rr    = rr    # rolling resistance, [0..1]
+    self.a     = a     # acceleration (positive) or slowing down (negative); a ∈ R[-1..1]
+    self.s     = s     # steer left (negative) or right (positive); s ∈ R[-1..1]
+    self.rr    = rr    # rolling resistance; rr ∈ R[0..1]
     self.stuck = False # stuck or free to move
+    self.engine = Engine()
 
   def bind(self, map, x = 0, y = 0, angle = 0, scale = None):
     self.map       = map # a racing map
     self.xlen, self.ylen = map.shape
     self.angle     = angle # in relation to X axis
     self.scale     = self.calc_scale() if scale is None else scale
-    self.x, self.y = x/self.scale, y/self.scale # position
+    self.norm      = self.MIN_NUM_MOVES / 5 # to feed sigmoid(x) with x ∈ R[-5..5]
+    self.i, self.j = x, y # indices on map
+    self.x, self.y = x/self.scale, y/self.scale # position ∈ R
 
     return self
 
-  def pos(self):
-    return self.pos_on_map(self.x, self.y)
-
-  def move(self):
+  def move(self, t=T):
     if self.stuck: return
 
     distances = self.look_around()
-    self.adjust_parameters(distances)
-    self.advance()
+    self.correct_behavior(distances, t)
+    self.advance(t)
 
   def look_around(self):
     return [self.look_into_direction(angle) for angle in self.EYES]
@@ -47,12 +51,21 @@ class Car(object):
 
     return math.sqrt((x - self.x)**2 + (y - self.y)**2) # distance
 
-  def adjust_parameters(self, distances):
-    print(list(map(lambda x: int(x), distances)))
+  def correct_behavior(self, distances, t):
+    feed_data = np.array([distances + [self.v]]) / self.norm
+    predictions = self.engine.predict(feed_data)
 
-  def advance(self, t = T):
-    self.x += math.cos(self.angle) * self.v * t/1000
-    self.y += math.sin(self.angle) * self.v * t/1000
+    self.a, self.s = predictions
+
+    self.v += self.a * t
+    self.angle += self.s * t
+
+  def advance(self, t):
+    self.x += math.cos(self.angle) * self.v * t
+    self.y += math.sin(self.angle) * self.v * t
+    self.i, self.j = self.pos_on_map(self.x, self.y)
+
+    if self.map[self.j][self.i] == 1: self.stuck = True
 
   def calc_scale(self):
     return self.map.shape[0]/self.MIN_NUM_MOVES
@@ -61,4 +74,4 @@ class Car(object):
     return [int(x * self.scale), int(y * self.scale)]
 
   def __str__(self):
-    return f"({self.x}, {self.y}) @ {self.angle * 180}°"
+    return f"({self.i}, {self.j}) @ {self.angle * 180}°"
