@@ -8,13 +8,21 @@ class Car(object):
   EYES = [-math.pi/2, -math.pi/4, 0, math.pi/4, math.pi/2]
   MIN_NUM_MOVES = 1000 # no matter how small the map might come we need at least that many moves
 
-  def __init__(self, v=0, a=0, s=0, rr=0.1):
+  # let's keep in memory all cars manufactured
+  count = 0
+  all = {}
+
+  def __init__(self, v=0, a=0, s=0, rr=0.1, parents=None):
     self.v     = v     # velocity, moves per second
     self.a     = a     # acceleration (positive) or slowing down (negative); a ∈ R[-1..1]
     self.s     = s     # steer left (negative) or right (positive); s ∈ R[-1..1]
     self.rr    = rr    # rolling resistance; rr ∈ R[0..1]
     self.stuck = False # stuck or free to move
-    self.engine = Engine()
+    self.engine = Engine(parents=self.engines_of(parents))
+
+    self.__class__.count += 1
+    self.id = self.__class__.count
+    self.__class__.all[self.id] = self
 
   def bind(self, map, x = 0, y = 0, angle = 0, scale = None):
     self.map       = map # a racing map
@@ -73,5 +81,16 @@ class Car(object):
   def pos_on_map(self, x, y):
     return [int(x * self.scale), int(y * self.scale)]
 
+  def engines_of(self, ids):
+    if not ids: return
+    elif ids.__class__ == list: return [self.engine_of(id) for id in ids]
+    elif ids.__class__ == self.__class__: return [self.engine]
+    elif ids.__class__ == int: return [self.engine_of(ids)]
+    elif ids.__class__ == str: return [self.engine_of(str(id))]
+    else: raise f"Ooouch! Don't know how to get an engine out of {ids.__class__} instance."
+
+  def engine_of(self, id):
+    return Car.all[id].engine
+
   def __str__(self):
-    return f"({self.i}, {self.j}) @ {self.angle * 180}°"
+    return f"Car[{self.id}]({self.i}, {self.j}) @ {self.angle * 180}°"
